@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FiFolder, FiPlus, FiX } from 'react-icons/fi'
+import { FiFolder, FiPlus, FiX, FiZap, FiCheck } from 'react-icons/fi'
 import { FaGithub } from 'react-icons/fa'
 
 interface SettingsProps {
@@ -19,6 +19,9 @@ export default function Settings({ projects, onProjectsChange, onClose }: Settin
   const [showRepos, setShowRepos] = useState(false)
   const [repoSearch, setRepoSearch] = useState('')
 
+  // Claude auth state
+  const [claudeAuth, setClaudeAuth] = useState<ClaudeAuthStatus | null>(null)
+
   useEffect(() => {
     const load = async () => {
       const api = window.electronAPI?.settings
@@ -30,6 +33,13 @@ export default function Settings({ projects, onProjectsChange, onClose }: Settin
         setTokenStatus('connected')
         const user = await api.getGithubUser()
         if (user) setGithubUser(user)
+      }
+
+      // Load Claude auth status
+      const claude = window.electronAPI?.claude
+      if (claude) {
+        const auth = await claude.detectAuth()
+        setClaudeAuth(auth)
       }
     }
     load()
@@ -128,6 +138,47 @@ export default function Settings({ projects, onProjectsChange, onClose }: Settin
       </div>
 
       <div className="settings-content">
+        {/* Claude AI Connection */}
+        <section className="settings-section">
+          <h3 className="settings-section-title">
+            <FiZap size={16} />
+            Claude AI
+          </h3>
+
+          {claudeAuth?.authenticated ? (
+            <div className="settings-claude-status">
+              <div className="settings-claude-status-row">
+                <FiCheck size={14} />
+                <span>Claude Code subscription active</span>
+                <span className="settings-github-badge">Connected</span>
+              </div>
+              <p className="settings-hint">
+                Powered by your Claude Code subscription. No additional configuration needed.
+              </p>
+            </div>
+          ) : (
+            <div className="settings-claude-status settings-claude-status-disconnected">
+              <p className="settings-hint">
+                {claudeAuth?.hasBinary
+                  ? 'Claude CLI found but no active session. Sign in to your Claude Code subscription:'
+                  : 'Claude Code CLI not found. Install it first:'}
+              </p>
+              {!claudeAuth?.hasBinary && (
+                <code className="settings-claude-code-block">npm install -g @anthropic-ai/claude-code</code>
+              )}
+              <p className="settings-hint">
+                Then sign in:
+              </p>
+              <code className="settings-claude-code-block">claude login</code>
+              <p className="settings-hint">
+                <span className="settings-hint-sub">
+                  Nova syncs your Claude Code subscription credentials automatically from the macOS Keychain.
+                </span>
+              </p>
+            </div>
+          )}
+        </section>
+
         {/* GitHub Connection */}
         <section className="settings-section">
           <h3 className="settings-section-title">

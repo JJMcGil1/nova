@@ -38,6 +38,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
     addProject: (project: any) => ipcRenderer.invoke('settings:addProject', project),
     removeProject: (projectId: string) => ipcRenderer.invoke('settings:removeProject', projectId),
   },
+  claude: {
+    detectAuth: () => ipcRenderer.invoke('claude:detectAuth'),
+    chat: (opts: {
+      streamId: string
+      prompt: string
+      model?: string
+      systemPrompt?: string
+      projectPath?: string
+      conversationHistory?: Array<{ role: string; content: string }>
+    }) => ipcRenderer.invoke('claude:chat', opts),
+    abort: (streamId: string) => ipcRenderer.invoke('claude:abort', streamId),
+    onStreamDelta: (cb: (data: { streamId: string; text: string }) => void) => {
+      const handler = (_event: any, data: any) => cb(data)
+      ipcRenderer.on('claude:streamDelta', handler)
+      return () => ipcRenderer.removeListener('claude:streamDelta', handler)
+    },
+    onStreamEnd: (cb: (data: { streamId: string; text: string }) => void) => {
+      const handler = (_event: any, data: any) => cb(data)
+      ipcRenderer.on('claude:streamEnd', handler)
+      return () => ipcRenderer.removeListener('claude:streamEnd', handler)
+    },
+    onStreamError: (cb: (data: { streamId: string; error: string }) => void) => {
+      const handler = (_event: any, data: any) => cb(data)
+      ipcRenderer.on('claude:streamError', handler)
+      return () => ipcRenderer.removeListener('claude:streamError', handler)
+    },
+  },
   db: {
     getAllThreads: () => ipcRenderer.invoke('db:getAllThreads'),
     getThread: (id: string) => ipcRenderer.invoke('db:getThread', id),

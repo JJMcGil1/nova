@@ -35,6 +35,13 @@ interface GithubRepo {
   updatedAt: string
 }
 
+interface ClaudeAuthStatus {
+  authenticated: boolean
+  hasBinary: boolean
+  hasKeychain: boolean
+  cliBinary: string | null
+}
+
 interface Window {
   electronAPI: {
     version?: string
@@ -47,6 +54,21 @@ interface Window {
       onDownloadProgress: (cb: (data: { percent: number; transferred: number; total: number }) => void) => () => void
       onUpdateDownloaded: (cb: (data: { version: string }) => void) => () => void
       onUpdateError: (cb: (data: { message: string }) => void) => () => void
+    }
+    claude?: {
+      detectAuth: () => Promise<ClaudeAuthStatus>
+      chat: (opts: {
+        streamId: string
+        prompt: string
+        model?: string
+        systemPrompt?: string
+        projectPath?: string
+        conversationHistory?: Array<{ role: string; content: string }>
+      }) => Promise<void>
+      abort: (streamId: string) => Promise<{ success: boolean }>
+      onStreamDelta: (cb: (data: { streamId: string; text: string }) => void) => () => void
+      onStreamEnd: (cb: (data: { streamId: string; text: string }) => void) => () => void
+      onStreamError: (cb: (data: { streamId: string; error: string }) => void) => () => void
     }
     settings?: {
       getConfig: () => Promise<{ hasToken: boolean; tokenHint: string; projects: NovaProject[] }>

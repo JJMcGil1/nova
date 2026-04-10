@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import https from 'node:https'
+import { execSync, spawn, ChildProcess } from 'node:child_process'
 import {
   checkForUpdates,
   downloadUpdate,
@@ -27,6 +28,9 @@ import {
 } from './database'
 
 let mainWindow: BrowserWindow | null = null
+
+// ── Active Claude CLI processes (for abort support) ─────────────────
+const activeStreams = new Map<string, ChildProcess>()
 
 // ── Config persistence (token only — projects moved to SQLite) ──────
 const configPath = path.join(app.getPath('userData'), 'nova-config.json')
@@ -92,6 +96,213 @@ function githubRequest(endpoint: string, token: string): Promise<any> {
     )
     req.on('error', reject)
   })
+}
+
+// ── Claude Code Integration ────────────────────────────────────────
+
+/** Read Claude Code OAuth credentials from macOS Keychain */
+function readKeychainCredentials(): { accessToken: string; refreshToken?: string; expiresAt?: string } | null {
+  if (process.platform !== 'darwin') return null
+  try {
+    const raw = execSync(
+      'security find-generic-password -s "Claude Code-credentials" -w',
+      { encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] },
+    ).trim()
+    const parsed = JSON.parse(raw)
+    // Credentials may be at top level or nested under claudeAiOauth
+    const creds = parsed.claudeAiOauth || parsed
+    if (creds.accessToken) return creds
+    // Some versions store as array of accounts
+    if (Array.isArray(creds) && creds.length > 0 && creds[0].accessToken) return creds[0]
+    return null
+  } catch {
+    return null
+  }
+}
+
+/** Find the Claude CLI binary */
+function findClaudeBinary(): string | null {
+  const candidates = [
+    path.join(process.env.HOME || '', '.local', 'bin', 'claude'),
+    '/opt/homebrew/bin/claude',
+    '/usr/local/bin/claude',
+    path.join(process.env.HOME || '', '.nvm', 'versions', 'node'),  // will be checked differently
+  ]
+
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) return p
+    } catch { /* skip */ }
+  }
+
+  // Fallback: use `which`
+  try {
+    const result = execSync('which claude', { encoding: 'utf-8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'] }).trim()
+    if (result && fs.existsSync(result)) return result
+  } catch { /* not found */ }
+
+  return null
+}
+
+/** Detect authentication status — subscription via keychain only */
+function detectClaudeAuth(): { authenticated: boolean; hasBinary: boolean; hasKeychain: boolean; cliBinary: string | null } {
+  const cliBinary = findClaudeBinary()
+  const keychainCreds = readKeychainCredentials()
+  const hasBinary = !!cliBinary
+  const hasKeychain = !!keychainCreds
+  const authenticated = hasBinary && hasKeychain
+
+  return { authenticated, hasBinary, hasKeychain, cliBinary }
+}
+
+/** Stream chat via Claude CLI subprocess */
+function streamViaCli(
+  streamId: string,
+  prompt: string,
+  cwd: string | undefined,
+  model: string,
+  systemPrompt: string | undefined,
+  conversationHistory: Array<{ role: string; content: string }>,
+  win: BrowserWindow,
+) {
+  const cliBinary = findClaudeBinary()
+  if (!cliBinary) {
+    win.webContents.send('claude:streamError', { streamId, error: 'Claude CLI binary not found' })
+    return
+  }
+
+  // Build the full prompt with conversation history for context
+  let fullPrompt = ''
+  if (systemPrompt) {
+    fullPrompt += `${systemPrompt}\n\n`
+  }
+  // Include recent conversation history
+  for (const msg of conversationHistory) {
+    const prefix = msg.role === 'user' ? 'Human' : 'Assistant'
+    fullPrompt += `${prefix}: ${msg.content}\n\n`
+  }
+  fullPrompt += `Human: ${prompt}\n\nAssistant:`
+
+  const args = [
+    '-p', fullPrompt,
+    '--output-format', 'stream-json',
+    '--verbose',
+    '--model', model,
+    '--max-turns', '200',
+    '--no-session-persistence',
+  ]
+
+  // Strip CLAUDE_CODE_* env vars to prevent nesting detection
+  const env = { ...process.env }
+  for (const key of Object.keys(env)) {
+    if (key.startsWith('CLAUDE_CODE_')) delete env[key]
+  }
+  // Ensure the CLI doesn't think it's nested
+  delete env.CLAUDE_CODE
+  delete env.CLAUDE_CODE_ENTRYPOINT
+
+  const child = spawn(cliBinary, args, {
+    cwd: cwd || process.env.HOME,
+    env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+
+  activeStreams.set(streamId, child)
+
+  let fullText = ''
+  let buffer = ''
+
+  child.stdout?.on('data', (data: Buffer) => {
+    buffer += data.toString()
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || '' // Keep incomplete line in buffer
+
+    for (const line of lines) {
+      if (!line.trim()) continue
+      try {
+        const event = JSON.parse(line)
+
+        // Handle different event types from Claude CLI stream-json output
+        if (event.type === 'assistant' && event.message) {
+          // Full message event - extract text from content blocks
+          const text = extractTextFromContent(event.message.content)
+          if (text && text !== fullText) {
+            fullText = text
+            win.webContents.send('claude:streamDelta', { streamId, text: fullText })
+          }
+        } else if (event.type === 'content_block_delta') {
+          // Incremental delta
+          if (event.delta?.text) {
+            fullText += event.delta.text
+            win.webContents.send('claude:streamDelta', { streamId, text: fullText })
+          }
+        } else if (event.type === 'message_start' || event.type === 'content_block_start') {
+          // Stream started - no action needed
+        } else if (event.type === 'message_stop' || event.type === 'message_delta') {
+          // May contain stop reason
+        } else if (event.type === 'result') {
+          // Final result from CLI
+          const text = extractTextFromResult(event)
+          if (text) {
+            fullText = text
+            win.webContents.send('claude:streamDelta', { streamId, text: fullText })
+          }
+        }
+      } catch {
+        // Not valid JSON - might be partial line or plain text output
+        // Some CLI versions output plain text
+      }
+    }
+  })
+
+  child.stderr?.on('data', (data: Buffer) => {
+    const text = data.toString()
+    // Ignore verbose/debug output, only forward actual errors
+    if (text.includes('Error') || text.includes('error')) {
+      console.error('[Claude CLI stderr]', text)
+    }
+  })
+
+  child.on('close', (code) => {
+    // Process any remaining buffer
+    if (buffer.trim()) {
+      try {
+        const event = JSON.parse(buffer)
+        if (event.type === 'result') {
+          const text = extractTextFromResult(event)
+          if (text) fullText = text
+        }
+      } catch { /* ignore */ }
+    }
+
+    activeStreams.delete(streamId)
+
+    if (code === 0 || fullText) {
+      win.webContents.send('claude:streamEnd', { streamId, text: fullText })
+    } else {
+      win.webContents.send('claude:streamError', { streamId, error: `CLI exited with code ${code}` })
+    }
+  })
+
+  child.on('error', (err) => {
+    activeStreams.delete(streamId)
+    win.webContents.send('claude:streamError', { streamId, error: err.message })
+  })
+}
+
+function extractTextFromContent(content: any[]): string {
+  if (!Array.isArray(content)) return ''
+  return content
+    .filter((block: any) => block.type === 'text')
+    .map((block: any) => block.text)
+    .join('')
+}
+
+function extractTextFromResult(event: any): string {
+  if (event.result) return typeof event.result === 'string' ? event.result : ''
+  if (event.content) return extractTextFromContent(event.content)
+  if (event.message?.content) return extractTextFromContent(event.message.content)
+  return ''
 }
 
 // ── Window ──────────────────────────────────────────────────────────
@@ -237,6 +448,59 @@ ipcMain.handle('db:addMessage', (_event, message: { id: string; threadId: string
 
 ipcMain.handle('db:deleteMessage', (_event, id: string) => {
   return deleteMessage(id)
+})
+
+// ── Claude IPC ──────────────────────────────────────────────────────
+ipcMain.handle('claude:detectAuth', () => {
+  return detectClaudeAuth()
+})
+
+ipcMain.handle(
+  'claude:chat',
+  (
+    _event,
+    opts: {
+      streamId: string
+      prompt: string
+      model?: string
+      systemPrompt?: string
+      projectPath?: string
+      conversationHistory?: Array<{ role: string; content: string }>
+    },
+  ) => {
+    if (!mainWindow) return
+    const auth = detectClaudeAuth()
+    const model = opts.model || 'sonnet'
+    const history = opts.conversationHistory || []
+
+    if (auth.authenticated) {
+      streamViaCli(
+        opts.streamId,
+        opts.prompt,
+        opts.projectPath,
+        model,
+        opts.systemPrompt,
+        history,
+        mainWindow,
+      )
+    } else {
+      mainWindow.webContents.send('claude:streamError', {
+        streamId: opts.streamId,
+        error: auth.hasBinary
+          ? 'Claude CLI found but no subscription detected. Sign in with: claude login'
+          : 'Claude Code not found. Install it first, then sign in with your subscription.',
+      })
+    }
+  },
+)
+
+ipcMain.handle('claude:abort', (_event, streamId: string) => {
+  const proc = activeStreams.get(streamId)
+  if (proc) {
+    proc.kill('SIGTERM')
+    activeStreams.delete(streamId)
+  }
+  return { success: true }
 })
 
 // ── App lifecycle ───────────────────────────────────────────────────

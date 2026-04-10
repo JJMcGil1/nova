@@ -1198,3 +1198,101 @@ body {
 .sidebar-chat-item-project svg {
   flex-shrink: 0;
 }
+
+/* ===== STREAMING UI ===== */
+.chat-streaming-indicator {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.chat-streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--purple-glow);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: cursor-blink 0.8s steps(1) infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.chat-stop-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--coral-warning);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.chat-stop-btn:hover {
+  background: rgba(216,90,48,0.1);
+  border-color: var(--coral-warning);
+}
+
+/* System/error messages */
+.chat-message-system .chat-message-avatar {
+  background: rgba(216,90,48,0.1);
+  color: var(--coral-warning);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.chat-message-system .chat-message-content {
+  color: var(--coral-warning);
+  font-size: 13px;
+}
+
+/* ===== CLAUDE SETTINGS ===== */
+.settings-claude-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.settings-claude-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--teal-success);
+  font-weight: 500;
+}
+
+.settings-claude-key-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.settings-claude-status-disconnected {
+  border-color: rgba(216,90,48,0.15);
+}
+
+.settings-claude-code-block {
+  display: block;
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  font-size: 13px;
+  color: var(--purple-glow);
+  user-select: all;
+}
