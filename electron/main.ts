@@ -1,7 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
-import https from 'node:https'
 import { execSync, spawn, ChildProcess } from 'node:child_process'
 import {
   checkForUpdates,
@@ -31,7 +30,7 @@ import {
 
 let mainWindow: BrowserWindow | null = null
 
-// ── Active Claude CLI processes (for abort support) ─────────────────
+// ── Active streams (for abort support) ──────────────────────────────
 const activeStreams = new Map<string, ChildProcess>()
 
 // ── Config persistence (token only — projects moved to SQLite) ──────
@@ -157,154 +156,158 @@ function detectClaudeAuth(): { authenticated: boolean; hasBinary: boolean; hasKe
   return { authenticated, hasBinary, hasKeychain, cliBinary }
 }
 
-/** Stream chat via Claude CLI subprocess */
+/** Map model shorthand to Anthropic model IDs */
+function resolveModelId(model: string): string {
+  const map: Record<string, string> = {
+    sonnet: 'sonnet',
+    opus: 'opus',
+    haiku: 'haiku',
+  }
+  return map[model] || model
+}
+
+/** Stream chat via Claude CLI subprocess with real-time event parsing */
 function streamViaCli(
   streamId: string,
   prompt: string,
   cwd: string | undefined,
   model: string,
-  systemPrompt: string | undefined,
-  conversationHistory: Array<{ role: string; content: string }>,
+  _systemPrompt: string | undefined,
+  _conversationHistory: Array<{ role: string; content: string }>,
   win: BrowserWindow,
 ) {
   const cliBinary = findClaudeBinary()
   if (!cliBinary) {
-    win.webContents.send('claude:streamError', { streamId, error: 'Claude CLI binary not found' })
+    win.webContents.send('claude:streamError', { streamId, error: 'Claude CLI not found' })
     return
   }
 
-  // Build the full prompt with conversation history for context
-  let fullPrompt = ''
-  if (systemPrompt) {
-    fullPrompt += `${systemPrompt}\n\n`
-  }
-  // Include recent conversation history
-  for (const msg of conversationHistory) {
-    const prefix = msg.role === 'user' ? 'Human' : 'Assistant'
-    fullPrompt += `${prefix}: ${msg.content}\n\n`
-  }
-  fullPrompt += `Human: ${prompt}\n\nAssistant:`
-
   const args = [
-    '-p', fullPrompt,
+    '-p', prompt,
     '--output-format', 'stream-json',
     '--verbose',
-    '--model', model,
-    '--max-turns', '200',
-    '--no-session-persistence',
+    '--include-partial-messages',
+    '--model', resolveModelId(model),
+    '--max-turns', '1',
   ]
 
-  // Strip CLAUDE_CODE_* env vars to prevent nesting detection
-  const env = { ...process.env }
-  for (const key of Object.keys(env)) {
-    if (key.startsWith('CLAUDE_CODE_')) delete env[key]
-  }
-  // Ensure the CLI doesn't think it's nested
-  delete env.CLAUDE_CODE
-  delete env.CLAUDE_CODE_ENTRYPOINT
-
-  const child = spawn(cliBinary, args, {
+  const proc = spawn(cliBinary, args, {
     cwd: cwd || process.env.HOME,
-    env,
     stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, FORCE_COLOR: '0' },
   })
 
-  activeStreams.set(streamId, child)
+  activeStreams.set(streamId, proc)
 
   let fullText = ''
-  let buffer = ''
+  let stdoutBuffer = ''
+  let streamEnded = false
 
-  child.stdout?.on('data', (data: Buffer) => {
-    buffer += data.toString()
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || '' // Keep incomplete line in buffer
+  // 16ms IPC batch queue (~60fps)
+  let pendingText: string | null = null
+  let batchTimer: ReturnType<typeof setTimeout> | null = null
+
+  function flushToRenderer() {
+    if (pendingText !== null) {
+      win.webContents.send('claude:streamDelta', { streamId, text: pendingText })
+      pendingText = null
+    }
+    batchTimer = null
+  }
+
+  function queueDelta(text: string) {
+    pendingText = text
+    if (!batchTimer) {
+      batchTimer = setTimeout(flushToRenderer, 16)
+    }
+  }
+
+  proc.stdout!.on('data', (chunk: Buffer) => {
+    stdoutBuffer += chunk.toString()
+
+    // Split on newlines — each JSON event is one line
+    const lines = stdoutBuffer.split('\n')
+    stdoutBuffer = lines.pop() || '' // Keep incomplete line in buffer
 
     for (const line of lines) {
       if (!line.trim()) continue
-      try {
-        const event = JSON.parse(line)
 
-        // Handle different event types from Claude CLI stream-json output
-        if (event.type === 'assistant' && event.message) {
-          // Full message event - extract text from content blocks
-          const text = extractTextFromContent(event.message.content)
-          if (text && text !== fullText) {
-            fullText = text
-            win.webContents.send('claude:streamDelta', { streamId, text: fullText })
-          }
-        } else if (event.type === 'content_block_delta') {
-          // Incremental delta
-          if (event.delta?.text) {
-            fullText += event.delta.text
-            win.webContents.send('claude:streamDelta', { streamId, text: fullText })
-          }
-        } else if (event.type === 'message_start' || event.type === 'content_block_start') {
-          // Stream started - no action needed
-        } else if (event.type === 'message_stop' || event.type === 'message_delta') {
-          // May contain stop reason
-        } else if (event.type === 'result') {
-          // Final result from CLI
-          const text = extractTextFromResult(event)
-          if (text) {
-            fullText = text
-            win.webContents.send('claude:streamDelta', { streamId, text: fullText })
+      try {
+        const parsed = JSON.parse(line)
+
+        // Handle stream_event wrapper: {"type":"stream_event","event":{"type":"content_block_delta",...}}
+        if (parsed.type === 'stream_event' && parsed.event) {
+          const evt = parsed.event
+
+          if (evt.type === 'content_block_delta') {
+            if (evt.delta?.type === 'text_delta' && evt.delta.text) {
+              fullText += evt.delta.text
+              queueDelta(fullText)
+            }
+            // Skip thinking_delta, signature_delta — we only stream visible text
+          } else if (evt.type === 'message_stop') {
+            // Flush final text immediately
+            if (batchTimer) {
+              clearTimeout(batchTimer)
+              batchTimer = null
+            }
+            flushToRenderer()
           }
         }
+        // Handle result event — stream is done
+        else if (parsed.type === 'result' && !streamEnded) {
+          streamEnded = true
+          if (batchTimer) {
+            clearTimeout(batchTimer)
+            batchTimer = null
+          }
+          flushToRenderer()
+          activeStreams.delete(streamId)
+          // Use result text if we somehow missed deltas
+          const resultText = fullText || parsed.result || ''
+          win.webContents.send('claude:streamEnd', { streamId, text: resultText })
+        }
       } catch {
-        // Not valid JSON - might be partial line or plain text output
-        // Some CLI versions output plain text
+        // Not valid JSON — skip
       }
     }
   })
 
-  child.stderr?.on('data', (data: Buffer) => {
-    const text = data.toString()
-    // Ignore verbose/debug output, only forward actual errors
-    if (text.includes('Error') || text.includes('error')) {
-      console.error('[Claude CLI stderr]', text)
+  proc.stderr!.on('data', (chunk: Buffer) => {
+    const text = chunk.toString().trim()
+    if (text && !text.includes('Warning: no stdin data')) {
+      console.log('[Claude CLI stderr]', text.slice(0, 200))
     }
   })
 
-  child.on('close', (code) => {
-    // Process any remaining buffer
-    if (buffer.trim()) {
-      try {
-        const event = JSON.parse(buffer)
-        if (event.type === 'result') {
-          const text = extractTextFromResult(event)
-          if (text) fullText = text
-        }
-      } catch { /* ignore */ }
+  proc.on('close', (code) => {
+    if (batchTimer) {
+      clearTimeout(batchTimer)
+      batchTimer = null
     }
-
-    activeStreams.delete(streamId)
-
-    if (code === 0 || fullText) {
-      win.webContents.send('claude:streamEnd', { streamId, text: fullText })
-    } else {
-      win.webContents.send('claude:streamError', { streamId, error: `CLI exited with code ${code}` })
+    flushToRenderer()
+    if (!streamEnded && activeStreams.has(streamId)) {
+      streamEnded = true
+      activeStreams.delete(streamId)
+      if (code !== 0 && !fullText) {
+        win.webContents.send('claude:streamError', { streamId, error: `Claude CLI exited with code ${code}` })
+      } else {
+        win.webContents.send('claude:streamEnd', { streamId, text: fullText })
+      }
     }
   })
 
-  child.on('error', (err) => {
+  proc.on('error', (err) => {
+    if (batchTimer) {
+      clearTimeout(batchTimer)
+      batchTimer = null
+    }
     activeStreams.delete(streamId)
     win.webContents.send('claude:streamError', { streamId, error: err.message })
   })
-}
 
-function extractTextFromContent(content: any[]): string {
-  if (!Array.isArray(content)) return ''
-  return content
-    .filter((block: any) => block.type === 'text')
-    .map((block: any) => block.text)
-    .join('')
-}
-
-function extractTextFromResult(event: any): string {
-  if (event.result) return typeof event.result === 'string' ? event.result : ''
-  if (event.content) return extractTextFromContent(event.content)
-  if (event.message?.content) return extractTextFromContent(event.message.content)
-  return ''
+  // Close stdin so CLI doesn't wait for input
+  proc.stdin!.end()
 }
 
 // ── Window ──────────────────────────────────────────────────────────
