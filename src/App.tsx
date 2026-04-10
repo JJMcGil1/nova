@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Titlebar from './components/Titlebar'
 import Sidebar from './components/Sidebar'
 import ChatView from './components/ChatView'
+import UpdateToast from './components/UpdateToast'
 
 type Theme = 'dark' | 'light'
 
@@ -31,6 +32,7 @@ export default function App() {
         />
         <ChatView chatId={activeChat} />
       </div>
+      <UpdateToast />
     </div>
   )
 }

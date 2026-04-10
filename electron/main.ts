@@ -1,5 +1,13 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'node:path'
+import {
+  checkForUpdates,
+  downloadUpdate,
+  installUpdate,
+  dismissUpdate,
+  startAutoUpdatePolling,
+  stopAutoUpdatePolling,
+} from './auto-updater'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -28,14 +36,26 @@ function createWindow() {
   }
 }
 
+// Auto-updater IPC handlers
+ipcMain.handle('updater:checkForUpdates', () => checkForUpdates())
+ipcMain.handle('updater:downloadUpdate', () => downloadUpdate())
+ipcMain.handle('updater:installUpdate', () => installUpdate())
+ipcMain.handle('updater:dismissUpdate', () => dismissUpdate())
+
 app.whenReady().then(() => {
   if (process.platform === 'darwin') {
     app.dock.setIcon(path.join(__dirname, '../build/icon.png'))
   }
   createWindow()
+
+  // Start auto-update polling in production only
+  if (!process.env.VITE_DEV_SERVER_URL) {
+    startAutoUpdatePolling()
+  }
 })
 
 app.on('window-all-closed', () => {
+  stopAutoUpdatePolling()
   if (process.platform !== 'darwin') app.quit()
 })
 

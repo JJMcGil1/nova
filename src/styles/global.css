@@ -417,3 +417,109 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
 }
+
+/* Update Toast */
+.update-toast {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 9999;
+  min-width: 280px;
+  max-width: 360px;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: toast-in 0.25s ease-out;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.update-toast-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.update-toast-icon {
+  color: var(--purple-glow);
+  flex-shrink: 0;
+}
+
+.update-toast-icon-error {
+  color: var(--coral-warning);
+}
+
+.update-toast-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.update-toast-btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.update-toast-btn-primary {
+  background: var(--purple-primary);
+  color: white;
+}
+
+.update-toast-btn-primary:hover {
+  background: var(--purple-hover);
+  box-shadow: var(--glow-sm);
+}
+
+.update-toast-btn-secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.update-toast-btn-secondary:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.update-toast-progress {
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.update-toast-progress-bar {
+  height: 100%;
+  background: var(--purple-glow);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.update-toast-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--purple-glow);
+  border-radius: 50%;
+  animation: toast-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes toast-spin {
+  to { transform: rotate(360deg); }
+}
