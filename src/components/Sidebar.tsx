@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FiPlus, FiChevronLeft, FiChevronRight, FiFolder, FiMessageSquare, FiTrash2 } from 'react-icons/fi'
+import { FiPlus, FiChevronLeft, FiChevronRight, FiFolder, FiMessageSquare, FiTrash2, FiSettings } from 'react-icons/fi'
 import { FaGithub } from 'react-icons/fa'
 
 interface SidebarProps {
@@ -11,6 +11,8 @@ interface SidebarProps {
   collapsed: boolean
   onToggleCollapse: () => void
   projects: NovaProject[]
+  onOpenSettings: () => void
+  settingsActive: boolean
 }
 
 export default function Sidebar({
@@ -22,6 +24,8 @@ export default function Sidebar({
   collapsed,
   onToggleCollapse,
   projects,
+  onOpenSettings,
+  settingsActive,
 }: SidebarProps) {
   const [showProjectPicker, setShowProjectPicker] = useState(false)
 
@@ -116,6 +120,17 @@ export default function Sidebar({
             </div>
           )
         })}
+      </div>
+
+      <div className="sidebar-footer">
+        <button
+          className={`sidebar-settings-btn ${settingsActive ? 'sidebar-settings-btn-active' : ''}`}
+          onClick={onOpenSettings}
+          title="Settings"
+        >
+          <FiSettings size={16} />
+          {!collapsed && <span>Settings</span>}
+        </button>
       </div>
     </div>
   )

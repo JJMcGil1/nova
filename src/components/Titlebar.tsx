@@ -1,25 +1,19 @@
-import { FiSettings, FiSun, FiMoon } from 'react-icons/fi'
+import { FiSun, FiMoon } from 'react-icons/fi'
+import NovaLogo from './NovaLogo'
 
 interface TitlebarProps {
   theme: 'dark' | 'light'
   onToggleTheme: () => void
-  onOpenSettings: () => void
-  settingsActive: boolean
 }
 
-export default function Titlebar({ theme, onToggleTheme, onOpenSettings, settingsActive }: TitlebarProps) {
+export default function Titlebar({ theme, onToggleTheme }: TitlebarProps) {
   return (
     <div className="titlebar">
       <div className="titlebar-traffic-spacer" />
-      <div className="titlebar-title">NOVA</div>
+      <div className="titlebar-logo">
+        <NovaLogo mode={theme} iconSize={20} fontSize={13} gap={8} />
+      </div>
       <div className="titlebar-actions">
-        <button
-          className={`titlebar-action-btn ${settingsActive ? 'titlebar-action-btn-active' : ''}`}
-          onClick={onOpenSettings}
-          title="Settings"
-        >
-          <FiSettings size={14} />
-        </button>
         <button
           className="titlebar-action-btn"
           onClick={onToggleTheme}

@@ -107,8 +107,6 @@ export default function App() {
       <Titlebar
         theme={theme}
         onToggleTheme={toggleTheme}
-        onOpenSettings={() => setView(view === 'settings' ? 'chat' : 'settings')}
-        settingsActive={view === 'settings'}
       />
       <div className="app-body">
         <Sidebar
@@ -120,6 +118,8 @@ export default function App() {
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           projects={projects}
+          onOpenSettings={() => setView(view === 'settings' ? 'chat' : 'settings')}
+          settingsActive={view === 'settings'}
         />
         {view === 'settings' ? (
           <Settings

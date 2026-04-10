@@ -118,15 +118,11 @@ body {
   flex-shrink: 0;
 }
 
-.titlebar-title {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 6px;
-  text-transform: uppercase;
-  color: var(--text-secondary);
+.titlebar-logo {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  -webkit-app-region: no-drag;
 }
 
 .titlebar-actions {
@@ -313,6 +309,42 @@ body {
   background: rgba(155,143,255,0.08);
   color: var(--text-primary);
   box-shadow: var(--glow-sm);
+}
+
+.sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-settings-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sidebar-settings-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.sidebar-settings-btn-active {
+  background: rgba(155,143,255,0.08);
+  color: var(--text-primary);
+  box-shadow: var(--glow-sm);
+}
+
+.sidebar-collapsed .sidebar-settings-btn {
+  justify-content: center;
+  padding: 10px;
 }
 
 /* Chat View */
