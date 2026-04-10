@@ -14,6 +14,7 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [view, setView] = useState<View>('chat')
   const [projects, setProjects] = useState<NovaProject[]>([])
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [theme, setTheme] = useState<Theme>(() => {
     return (localStorage.getItem('nova-theme') as Theme) || 'dark'
   })
@@ -32,6 +33,10 @@ export default function App() {
       // Load projects
       const config = await api.settings?.getConfig()
       if (config) setProjects(config.projects)
+
+      // Load user profile
+      const profile = await api.profile?.get()
+      if (profile) setUserProfile(profile)
 
       // Load threads from DB
       const dbThreads = await api.db?.getAllThreads()
@@ -120,12 +125,15 @@ export default function App() {
           projects={projects}
           onOpenSettings={() => setView(view === 'settings' ? 'chat' : 'settings')}
           settingsActive={view === 'settings'}
+          userProfile={userProfile}
         />
         {view === 'settings' ? (
           <Settings
             projects={projects}
             onProjectsChange={setProjects}
             onClose={() => setView('chat')}
+            userProfile={userProfile}
+            onProfileChange={setUserProfile}
           />
         ) : (
           <ChatView

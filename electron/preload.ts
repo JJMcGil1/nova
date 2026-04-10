@@ -38,6 +38,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     addProject: (project: any) => ipcRenderer.invoke('settings:addProject', project),
     removeProject: (projectId: string) => ipcRenderer.invoke('settings:removeProject', projectId),
   },
+  profile: {
+    get: () => ipcRenderer.invoke('profile:get'),
+    update: (updates: { firstName?: string; lastName?: string; email?: string; avatarPath?: string | null }) =>
+      ipcRenderer.invoke('profile:update', updates),
+    pickAvatar: () => ipcRenderer.invoke('profile:pickAvatar'),
+  },
+  pickFile: () => ipcRenderer.invoke('dialog:pickFile'),
   claude: {
     detectAuth: () => ipcRenderer.invoke('claude:detectAuth'),
     chat: (opts: {

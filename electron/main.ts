@@ -25,6 +25,8 @@ import {
   getMessages,
   addMessage,
   deleteMessage,
+  getUserProfile,
+  updateUserProfile,
 } from './database'
 
 let mainWindow: BrowserWindow | null = null
@@ -448,6 +450,57 @@ ipcMain.handle('db:addMessage', (_event, message: { id: string; threadId: string
 
 ipcMain.handle('db:deleteMessage', (_event, id: string) => {
   return deleteMessage(id)
+})
+
+// ── User Profile IPC ───────────────────────────────────────────────
+const mimeTypes: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' }
+
+function profileWithDataUrl(profile: any) {
+  if (!profile?.avatar_path) return profile
+  try {
+    const ext = path.extname(profile.avatar_path).toLowerCase()
+    const mime = mimeTypes[ext] || 'image/png'
+    const data = fs.readFileSync(profile.avatar_path)
+    return { ...profile, avatar_data_url: `data:${mime};base64,${data.toString('base64')}` }
+  } catch {
+    return profile
+  }
+}
+
+ipcMain.handle('profile:get', () => {
+  return profileWithDataUrl(getUserProfile())
+})
+
+ipcMain.handle('profile:update', (_event, updates: { firstName?: string; lastName?: string; email?: string; avatarPath?: string | null }) => {
+  return profileWithDataUrl(updateUserProfile(updates))
+})
+
+ipcMain.handle('profile:pickAvatar', async () => {
+  if (!mainWindow) return null
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] }],
+    title: 'Choose Profile Photo',
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+
+  const src = result.filePaths[0]
+  const ext = path.extname(src)
+  const dest = path.join(app.getPath('userData'), `avatar${ext}`)
+  fs.copyFileSync(src, dest)
+
+  return profileWithDataUrl(updateUserProfile({ avatarPath: dest }))
+})
+
+// ── File Picker IPC ────────────────────────────────────────────────
+ipcMain.handle('dialog:pickFile', async () => {
+  if (!mainWindow) return { canceled: true, filePaths: [] }
+  return dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  })
 })
 
 // ── Claude IPC ──────────────────────────────────────────────────────

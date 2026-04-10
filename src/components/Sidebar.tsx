@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { FiPlus, FiChevronLeft, FiChevronRight, FiFolder, FiMessageSquare, FiTrash2, FiSettings } from 'react-icons/fi'
+import { useState, useEffect } from 'react'
+import { FiPlus, FiChevronLeft, FiChevronRight, FiFolder, FiMessageSquare, FiTrash2, FiUser } from 'react-icons/fi'
 import { FaGithub } from 'react-icons/fa'
 
 interface SidebarProps {
@@ -13,6 +13,7 @@ interface SidebarProps {
   projects: NovaProject[]
   onOpenSettings: () => void
   settingsActive: boolean
+  userProfile?: UserProfile | null
 }
 
 export default function Sidebar({
@@ -26,6 +27,7 @@ export default function Sidebar({
   projects,
   onOpenSettings,
   settingsActive,
+  userProfile,
 }: SidebarProps) {
   const [showProjectPicker, setShowProjectPicker] = useState(false)
 
@@ -124,12 +126,29 @@ export default function Sidebar({
         </div>
 
         <button
-          className={`sidebar-settings-btn ${settingsActive ? 'sidebar-settings-btn-active' : ''}`}
+          className={`sidebar-account-tile ${settingsActive ? 'sidebar-account-tile-active' : ''}`}
           onClick={onOpenSettings}
-          title="Settings"
+          title="Account & Settings"
         >
-          <FiSettings size={16} />
-          {!collapsed && <span>Settings</span>}
+          <div className="sidebar-account-avatar">
+            {userProfile?.avatar_data_url ? (
+              <img src={userProfile.avatar_data_url} alt="" />
+            ) : (
+              <FiUser size={collapsed ? 16 : 14} />
+            )}
+          </div>
+          {!collapsed && (
+            <div className="sidebar-account-info">
+              <span className="sidebar-account-name">
+                {userProfile?.first_name || userProfile?.last_name
+                  ? `${userProfile.first_name} ${userProfile.last_name}`.trim()
+                  : 'Set up profile'}
+              </span>
+              {userProfile?.email && (
+                <span className="sidebar-account-email">{userProfile.email}</span>
+              )}
+            </div>
+          )}
         </button>
       </div>
     </div>

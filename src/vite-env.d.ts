@@ -35,6 +35,16 @@ interface GithubRepo {
   updatedAt: string
 }
 
+interface UserProfile {
+  id: number
+  first_name: string
+  last_name: string
+  email: string
+  avatar_path: string | null
+  avatar_data_url?: string
+  updated_at: string
+}
+
 interface ClaudeAuthStatus {
   authenticated: boolean
   hasBinary: boolean
@@ -54,6 +64,12 @@ interface Window {
       onDownloadProgress: (cb: (data: { percent: number; transferred: number; total: number }) => void) => () => void
       onUpdateDownloaded: (cb: (data: { version: string }) => void) => () => void
       onUpdateError: (cb: (data: { message: string }) => void) => () => void
+    }
+    pickFile?: () => Promise<{ canceled: boolean; filePaths: string[] }>
+    profile?: {
+      get: () => Promise<UserProfile>
+      update: (updates: { firstName?: string; lastName?: string; email?: string; avatarPath?: string | null }) => Promise<UserProfile>
+      pickAvatar: () => Promise<UserProfile | null>
     }
     claude?: {
       detectAuth: () => Promise<ClaudeAuthStatus>

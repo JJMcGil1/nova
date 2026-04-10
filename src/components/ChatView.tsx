@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { FiFolder, FiX, FiArrowUp, FiSquare } from 'react-icons/fi'
+import { FiFolder, FiX, FiArrowUp, FiSquare, FiPaperclip, FiChevronDown } from 'react-icons/fi'
 import { FaGithub } from 'react-icons/fa'
+
+const MODEL_OPTIONS = [
+  { id: 'sonnet', label: 'Sonnet 4.6', desc: 'Fast & capable' },
+  { id: 'opus', label: 'Opus 4.6', desc: 'Most intelligent' },
+  { id: 'haiku', label: 'Haiku 4.5', desc: 'Fastest' },
+] as const
 
 interface ChatViewProps {
   threadId: string
@@ -16,6 +22,10 @@ export default function ChatView({ threadId, project, projects, onSetProject }: 
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingText, setStreamingText] = useState('')
   const [authStatus, setAuthStatus] = useState<ClaudeAuthStatus | null>(null)
+  const [selectedModel, setSelectedModel] = useState<string>('sonnet')
+  const [showModelSelector, setShowModelSelector] = useState(false)
+  const [attachments, setAttachments] = useState<{ name: string; path: string }[]>([])
+  const modelSelectorRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const activeStreamId = useRef<string | null>(null)
@@ -121,6 +131,30 @@ export default function ChatView({ threadId, project, projects, onSetProject }: 
     }
   }, [input])
 
+  // Close model selector on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (modelSelectorRef.current && !modelSelectorRef.current.contains(e.target as Node)) {
+        setShowModelSelector(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const pickAttachment = useCallback(async () => {
+    const result = await window.electronAPI?.pickFile?.()
+    if (result && !result.canceled && result.filePaths?.length) {
+      const filePath = result.filePaths[0]
+      const name = filePath.split('/').pop() || filePath
+      setAttachments(prev => [...prev, { name, path: filePath }])
+    }
+  }, [])
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
+  }
+
   const sendMessage = useCallback(async () => {
     const text = input.trim()
     if (!text || !threadId || isStreaming) return
@@ -171,14 +205,16 @@ export default function ChatView({ threadId, project, projects, onSetProject }: 
     await claude.chat({
       streamId,
       prompt: text,
-      model: 'sonnet',
+      model: selectedModel,
       systemPrompt,
       projectPath: project?.path,
       // Don't pass history for CLI mode - it's included in the prompt
       // For API mode, pass properly formatted history
       conversationHistory: conversationHistory.slice(0, -1), // Exclude current message (sent as prompt)
     })
-  }, [input, threadId, isStreaming, messages, project])
+    // Clear attachments after send
+    setAttachments([])
+  }, [input, threadId, isStreaming, messages, project, selectedModel])
 
   const abortStream = useCallback(async () => {
     if (activeStreamId.current) {
@@ -270,29 +306,17 @@ export default function ChatView({ threadId, project, projects, onSetProject }: 
       </div>
       <div className="chat-input-area">
         <div className="chat-input-wrapper">
-          {!project && projects.length > 0 && (
-            <div className="chat-input-project-selector">
-              <button
-                className="chat-input-project-btn"
-                onClick={() => setShowProjectSelector(!showProjectSelector)}
-                title="Attach project context"
-              >
-                <FiFolder size={14} />
-              </button>
-              {showProjectSelector && (
-                <div className="chat-input-project-dropdown">
-                  {projects.map((p) => (
-                    <button
-                      key={p.id}
-                      className="chat-input-project-option"
-                      onClick={() => { onSetProject(p.id); setShowProjectSelector(false) }}
-                    >
-                      {isGithubProject(p) ? <FaGithub size={12} /> : <FiFolder size={12} />}
-                      <span>{p.name}</span>
-                    </button>
-                  ))}
+          {attachments.length > 0 && (
+            <div className="chat-input-attachments">
+              {attachments.map((att, i) => (
+                <div key={i} className="chat-input-attachment-chip">
+                  <FiPaperclip size={11} />
+                  <span>{att.name}</span>
+                  <button onClick={() => removeAttachment(i)} className="chat-input-attachment-remove">
+                    <FiX size={11} />
+                  </button>
                 </div>
-              )}
+              ))}
             </div>
           )}
           <textarea
@@ -305,15 +329,72 @@ export default function ChatView({ threadId, project, projects, onSetProject }: 
             rows={1}
             disabled={isStreaming}
           />
-          {isStreaming ? (
-            <button className="chat-stop-btn" onClick={abortStream} title="Stop generating">
-              <FiSquare size={12} />
-            </button>
-          ) : (
-            <button className="chat-send-btn" onClick={sendMessage} disabled={!input.trim() || (authStatus !== null && !authStatus.authenticated)}>
-              <FiArrowUp size={16} />
-            </button>
-          )}
+          <div className="chat-input-toolbar">
+            <div className="chat-input-toolbar-left">
+              <div className="chat-model-selector" ref={modelSelectorRef}>
+                <button
+                  className="chat-model-selector-btn"
+                  onClick={() => setShowModelSelector(!showModelSelector)}
+                >
+                  <span>{MODEL_OPTIONS.find(m => m.id === selectedModel)?.label || 'Sonnet 4.6'}</span>
+                  <FiChevronDown size={12} />
+                </button>
+                {showModelSelector && (
+                  <div className="chat-model-dropdown">
+                    {MODEL_OPTIONS.map((m) => (
+                      <button
+                        key={m.id}
+                        className={`chat-model-option ${selectedModel === m.id ? 'active' : ''}`}
+                        onClick={() => { setSelectedModel(m.id); setShowModelSelector(false) }}
+                      >
+                        <span className="chat-model-option-name">{m.label}</span>
+                        <span className="chat-model-option-desc">{m.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button className="chat-toolbar-btn" onClick={pickAttachment} title="Attach file">
+                <FiPaperclip size={14} />
+              </button>
+              {!project && projects.length > 0 && (
+                <div className="chat-input-project-selector">
+                  <button
+                    className="chat-toolbar-btn"
+                    onClick={() => setShowProjectSelector(!showProjectSelector)}
+                    title="Attach project context"
+                  >
+                    <FiFolder size={14} />
+                  </button>
+                  {showProjectSelector && (
+                    <div className="chat-input-project-dropdown">
+                      {projects.map((p) => (
+                        <button
+                          key={p.id}
+                          className="chat-input-project-option"
+                          onClick={() => { onSetProject(p.id); setShowProjectSelector(false) }}
+                        >
+                          {isGithubProject(p) ? <FaGithub size={12} /> : <FiFolder size={12} />}
+                          <span>{p.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="chat-input-toolbar-right">
+              {isStreaming ? (
+                <button className="chat-stop-btn" onClick={abortStream} title="Stop generating">
+                  <FiSquare size={12} />
+                </button>
+              ) : (
+                <button className="chat-send-btn" onClick={sendMessage} disabled={!input.trim() || (authStatus !== null && !authStatus.authenticated)}>
+                  <FiArrowUp size={16} />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

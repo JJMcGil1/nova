@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react'
-import { FiFolder, FiPlus, FiX, FiZap, FiCheck } from 'react-icons/fi'
+import { useState, useEffect, useRef } from 'react'
+import { FiFolder, FiPlus, FiX, FiZap, FiCheck, FiUser, FiCamera } from 'react-icons/fi'
 import { FaGithub } from 'react-icons/fa'
 
 interface SettingsProps {
   projects: NovaProject[]
   onProjectsChange: (projects: NovaProject[]) => void
   onClose: () => void
+  userProfile: UserProfile | null
+  onProfileChange: (profile: UserProfile) => void
 }
 
-export default function Settings({ projects, onProjectsChange, onClose }: SettingsProps) {
+export default function Settings({ projects, onProjectsChange, onClose, userProfile, onProfileChange }: SettingsProps) {
   const [tokenInput, setTokenInput] = useState('')
   const [tokenStatus, setTokenStatus] = useState<'idle' | 'loading' | 'connected' | 'error'>('idle')
   const [tokenHint, setTokenHint] = useState('')
@@ -21,6 +23,14 @@ export default function Settings({ projects, onProjectsChange, onClose }: Settin
 
   // Claude auth state
   const [claudeAuth, setClaudeAuth] = useState<ClaudeAuthStatus | null>(null)
+
+  // Profile form state
+  const [firstName, setFirstName] = useState(userProfile?.first_name || '')
+  const [lastName, setLastName] = useState(userProfile?.last_name || '')
+  const [email, setEmail] = useState(userProfile?.email || '')
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
+  const saveTimeout = useRef<ReturnType<typeof setTimeout>>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -44,6 +54,25 @@ export default function Settings({ projects, onProjectsChange, onClose }: Settin
     }
     load()
   }, [])
+
+  const saveProfile = async () => {
+    const api = window.electronAPI?.profile
+    if (!api) return
+    setProfileSaving(true)
+    const updated = await api.update({ firstName, lastName, email })
+    onProfileChange(updated)
+    setProfileSaving(false)
+    setProfileSaved(true)
+    if (saveTimeout.current) clearTimeout(saveTimeout.current)
+    saveTimeout.current = setTimeout(() => setProfileSaved(false), 2000)
+  }
+
+  const pickAvatar = async () => {
+    const api = window.electronAPI?.profile
+    if (!api) return
+    const updated = await api.pickAvatar()
+    if (updated) onProfileChange(updated)
+  }
 
   const connectToken = async () => {
     const api = window.electronAPI?.settings
@@ -138,6 +167,71 @@ export default function Settings({ projects, onProjectsChange, onClose }: Settin
       </div>
 
       <div className="settings-content">
+        {/* Profile */}
+        <section className="settings-section">
+          <h3 className="settings-section-title">
+            <FiUser size={16} />
+            Profile
+          </h3>
+
+          <div className="settings-profile">
+            <div className="settings-profile-avatar-wrapper" onClick={pickAvatar}>
+              <div className="settings-profile-avatar">
+                {userProfile?.avatar_data_url ? (
+                  <img src={userProfile.avatar_data_url} alt="" />
+                ) : (
+                  <FiUser size={32} />
+                )}
+              </div>
+              <div className="settings-profile-avatar-overlay">
+                <FiCamera size={16} />
+              </div>
+            </div>
+
+            <div className="settings-profile-fields">
+              <div className="settings-profile-row">
+                <div className="settings-profile-field">
+                  <label className="settings-label">First Name</label>
+                  <input
+                    type="text"
+                    className="settings-input"
+                    placeholder="First name"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                  />
+                </div>
+                <div className="settings-profile-field">
+                  <label className="settings-label">Last Name</label>
+                  <input
+                    type="text"
+                    className="settings-input"
+                    placeholder="Last name"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="settings-profile-field">
+                <label className="settings-label">Email</label>
+                <input
+                  type="email"
+                  className="settings-input"
+                  placeholder="email@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+              <button
+                className="settings-btn settings-btn-primary"
+                onClick={saveProfile}
+                disabled={profileSaving}
+              >
+                {profileSaved ? 'Saved!' : profileSaving ? 'Saving...' : 'Save Profile'}
+              </button>
+            </div>
+          </div>
+        </section>
+
         {/* Claude AI Connection */}
         <section className="settings-section">
           <h3 className="settings-section-title">

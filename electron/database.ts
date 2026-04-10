@@ -44,6 +44,17 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id);
     CREATE INDEX IF NOT EXISTS idx_threads_project ON threads(project_id);
     CREATE INDEX IF NOT EXISTS idx_threads_updated ON threads(updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS user_profile (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      first_name TEXT NOT NULL DEFAULT '',
+      last_name TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL DEFAULT '',
+      avatar_path TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    INSERT OR IGNORE INTO user_profile (id) VALUES (1);
   `)
 
   return db
@@ -139,6 +150,40 @@ export function addMessage(message: { id: string; threadId: string; role: string
 
 export function deleteMessage(id: string) {
   getDb().prepare('DELETE FROM messages WHERE id = ?').run(id)
+}
+
+// ── User Profile ────────────────────────────────────────────────────
+
+export function getUserProfile() {
+  return getDb().prepare('SELECT * FROM user_profile WHERE id = 1').get()
+}
+
+export function updateUserProfile(updates: { firstName?: string; lastName?: string; email?: string; avatarPath?: string | null }) {
+  const fields: string[] = []
+  const params: Record<string, any> = { id: 1 }
+
+  if (updates.firstName !== undefined) {
+    fields.push('first_name = @firstName')
+    params.firstName = updates.firstName
+  }
+  if (updates.lastName !== undefined) {
+    fields.push('last_name = @lastName')
+    params.lastName = updates.lastName
+  }
+  if (updates.email !== undefined) {
+    fields.push('email = @email')
+    params.email = updates.email
+  }
+  if (updates.avatarPath !== undefined) {
+    fields.push('avatar_path = @avatarPath')
+    params.avatarPath = updates.avatarPath
+  }
+
+  if (fields.length === 0) return getUserProfile()
+
+  fields.push("updated_at = datetime('now')")
+  getDb().prepare(`UPDATE user_profile SET ${fields.join(', ')} WHERE id = @id`).run(params)
+  return getUserProfile()
 }
 
 export function closeDatabase() {
