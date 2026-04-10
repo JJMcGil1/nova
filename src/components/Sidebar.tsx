@@ -41,47 +41,6 @@ export default function Sidebar({
         </button>
       </div>
 
-      <div className="sidebar-new-chat-wrapper">
-        <button className="sidebar-new-chat" onClick={() => {
-          if (projects.length > 0) {
-            setShowProjectPicker(!showProjectPicker)
-          } else {
-            onNewChat()
-          }
-        }}>
-          <FiPlus size={14} />
-          {!collapsed && <span>New Chat</span>}
-        </button>
-
-        {showProjectPicker && !collapsed && (
-          <div className="sidebar-project-picker">
-            <button
-              className="sidebar-project-picker-item"
-              onClick={() => { onNewChat(); setShowProjectPicker(false) }}
-            >
-              <span className="sidebar-project-picker-icon">
-                <FiMessageSquare size={12} />
-              </span>
-              <span>General Chat</span>
-            </button>
-            {projects.map((project) => (
-              <button
-                key={project.id}
-                className="sidebar-project-picker-item"
-                onClick={() => { onNewChat(project.id); setShowProjectPicker(false) }}
-              >
-                <span className="sidebar-project-picker-icon">
-                  {(project.githubRepo || project.github_repo)
-                    ? <FaGithub size={12} />
-                    : <FiFolder size={12} />}
-                </span>
-                <span>{project.name}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
       <div className="sidebar-chats">
         {threads.map((thread) => {
           const project = getProjectForThread(thread)
@@ -123,6 +82,47 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-footer">
+        <div className="sidebar-new-chat-wrapper">
+          <button className="sidebar-new-chat" onClick={() => {
+            if (projects.length > 0) {
+              setShowProjectPicker(!showProjectPicker)
+            } else {
+              onNewChat()
+            }
+          }}>
+            <FiPlus size={14} />
+            {!collapsed && <span>New Chat</span>}
+          </button>
+
+          {showProjectPicker && !collapsed && (
+            <div className="sidebar-project-picker">
+              <button
+                className="sidebar-project-picker-item"
+                onClick={() => { onNewChat(); setShowProjectPicker(false) }}
+              >
+                <span className="sidebar-project-picker-icon">
+                  <FiMessageSquare size={12} />
+                </span>
+                <span>General Chat</span>
+              </button>
+              {projects.map((project) => (
+                <button
+                  key={project.id}
+                  className="sidebar-project-picker-item"
+                  onClick={() => { onNewChat(project.id); setShowProjectPicker(false) }}
+                >
+                  <span className="sidebar-project-picker-icon">
+                    {(project.githubRepo || project.github_repo)
+                      ? <FaGithub size={12} />
+                      : <FiFolder size={12} />}
+                  </span>
+                  <span>{project.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <button
           className={`sidebar-settings-btn ${settingsActive ? 'sidebar-settings-btn-active' : ''}`}
           onClick={onOpenSettings}
