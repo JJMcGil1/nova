@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { FiDownload, FiAlertCircle } from 'react-icons/fi'
 
 type UpdateState = 'hidden' | 'available' | 'downloading' | 'installing' | 'error'
 
@@ -32,7 +33,6 @@ export default function UpdateToast() {
 
     unsubs.push(updater.onUpdateDownloaded(() => {
       setState('installing')
-      // Auto-install after download
       updater.installUpdate()
     }))
 
@@ -69,10 +69,7 @@ export default function UpdateToast() {
       {state === 'available' && (
         <>
           <div className="update-toast-content">
-            <svg className="update-toast-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M8 1v10M4 7l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M2 13h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
+            <FiDownload size={16} className="update-toast-icon" />
             <span>Nova {info.version} is available</span>
           </div>
           <div className="update-toast-actions">
@@ -104,10 +101,7 @@ export default function UpdateToast() {
       {state === 'error' && (
         <>
           <div className="update-toast-content">
-            <svg className="update-toast-icon update-toast-icon-error" width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
+            <FiAlertCircle size={16} className="update-toast-icon update-toast-icon-error" />
             <span>{info.message || 'Update failed'}</span>
           </div>
           <div className="update-toast-actions">

@@ -28,4 +28,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('updater:onUpdateError', handler)
     },
   },
+  settings: {
+    getConfig: () => ipcRenderer.invoke('settings:getConfig'),
+    setGithubToken: (token: string) => ipcRenderer.invoke('settings:setGithubToken', token),
+    removeGithubToken: () => ipcRenderer.invoke('settings:removeGithubToken'),
+    getGithubUser: () => ipcRenderer.invoke('settings:getGithubUser'),
+    listGithubRepos: () => ipcRenderer.invoke('settings:listGithubRepos'),
+    pickFolder: () => ipcRenderer.invoke('settings:pickFolder'),
+    addProject: (project: any) => ipcRenderer.invoke('settings:addProject', project),
+    removeProject: (projectId: string) => ipcRenderer.invoke('settings:removeProject', projectId),
+  },
+  db: {
+    getAllThreads: () => ipcRenderer.invoke('db:getAllThreads'),
+    getThread: (id: string) => ipcRenderer.invoke('db:getThread', id),
+    createThread: (thread: { id: string; title: string; projectId?: string }) =>
+      ipcRenderer.invoke('db:createThread', thread),
+    updateThread: (id: string, updates: { title?: string; projectId?: string | null }) =>
+      ipcRenderer.invoke('db:updateThread', id, updates),
+    deleteThread: (id: string) => ipcRenderer.invoke('db:deleteThread', id),
+    getMessages: (threadId: string) => ipcRenderer.invoke('db:getMessages', threadId),
+    addMessage: (message: { id: string; threadId: string; role: string; content: string }) =>
+      ipcRenderer.invoke('db:addMessage', message),
+    deleteMessage: (id: string) => ipcRenderer.invoke('db:deleteMessage', id),
+  },
 })
